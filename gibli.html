@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>지브리 스타일 이미지 변환기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        .file-input-label {
+            display: inline-block;
+            background-color: #4f46e5;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+        .file-input-label:hover {
+            background-color: #4338ca;
+        }
+        .button-primary {
+            background-color: #10b981;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: background-color 0.3s ease;
+            width: 100%;
+            border: none;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        .button-primary:hover {
+            background-color: #059669;
+        }
+        .image-preview, .generated-image {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            margin-top: 20px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+        }
+        .loading-indicator {
+            margin-top: 20px;
+            font-size: 1.1em;
+            color: #6b7280;
+        }
+        .error-message {
+            color: #ef4444;
+            margin-top: 15px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6">지브리 스타일 이미지 변환기</h1>
+        <p class="text-gray-600 mb-6">사진을 업로드하여 지브리 애니메이션 스타일로 변환해보세요.</p>
+
+        <input type="file" id="imageUpload" accept="image/*" class="hidden" onchange="previewImage(event)">
+        <label for="imageUpload" class="file-input-label">
+            사진 업로드
+        </label>
+
+        <div id="previewContainer" class="mt-4 hidden">
+            <h2 class="text-xl font-semibold text-gray-700 mb-3">미리보기:</h2>
+            <img id="imagePreview" class="image-preview mx-auto" src="#" alt="Image Preview">
+        </div>
+
+        <button id="convertButton" class="button-primary" onclick="convertImage()" disabled>
+            지브리 스타일로 변환
+        </button>
+
+        <div id="loading" class="loading-indicator hidden">
+            이미지 변환 중... 잠시만 기다려 주세요.
+        </div>
+
+        <div id="resultContainer" class="mt-6 hidden">
+            <h2 class="text-xl font-semibold text-gray-700 mb-3">변환된 이미지:</h2>
+            <img id="generatedImage" class="generated-image mx-auto" src="#" alt="Generated Image">
+        </div>
+
+        <div id="errorMessage" class="error-message hidden"></div>
+    </div>
+
+    <script>
+        const imageUpload = document.getElementById('imageUpload');
+        const imagePreview = document.getElementById('imagePreview');
+        const previewContainer = document.getElementById('previewContainer');
+        const convertButton = document.getElementById('convertButton');
+        const loadingIndicator = document.getElementById('loading');
+        const generatedImage = document.getElementById('generatedImage');
+        const resultContainer = document.getElementById('resultContainer');
+        const errorMessage = document.getElementById('errorMessage');
+
+        let uploadedBase64Image = '';
+        let uploadedImageMimeType = ''; // 업로드된 이미지의 MIME 타입을 저장할 변수
+
+        // 이미지 미리보기 및 변환 버튼 활성화
+        function previewImage(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    imagePreview.src = e.target.result;
+                    uploadedBase64Image = e.target.result.split(',')[1]; // Base64 데이터만 추출
+                    uploadedImageMimeType = file.type; // MIME 타입 저장
+                    previewContainer.classList.remove('hidden');
+                    convertButton.disabled = false;
+                    resultContainer.classList.add('hidden'); // 새로운 이미지 업로드 시 이전 결과 숨김
+                    errorMessage.classList.add('hidden'); // 에러 메시지 숨김
+                };
+                reader.readAsDataURL(file);
+            } else {
+                imagePreview.src = '#';
+                previewContainer.classList.add('hidden');
+                convertButton.disabled = true;
+                uploadedBase64Image = '';
+                uploadedImageMimeType = '';
+            }
+        }
+
+        // 이미지를 지브리 스타일로 변환하는 함수
+        async function convertImage() {
+            if (!uploadedBase64Image) {
+                showError('먼저 사진을 업로드해주세요.');
+                return;
+            }
+
+            loadingIndicator.classList.remove('hidden');
+            convertButton.disabled = true;
+            resultContainer.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+
+            try {
+                // Step 1: 이미지 분석 (Gemini 모델 사용)
+                const geminiPrompt = "Describe the main subject and background of this image in detail, focusing on elements that could be reinterpreted in a Studio Ghibli style. For example, describe the person's appearance, clothing, and expression, and the details of the room/environment. Keep the description concise but rich in visual details.";
+                
+                const geminiPayload = {
+                    contents: [
+                        {
+                            role: "user",
+                            parts: [
+                                { text: geminiPrompt },
+                                {
+                                    inlineData: {
+                                        mimeType: uploadedImageMimeType, // 동적으로 MIME 타입 사용
+                                        data: uploadedBase64Image
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                };
+                const geminiApiKey = ""; // Canvas 환경에서 자동으로 제공
+                const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
+
+                const geminiResponse = await fetch(geminiApiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(geminiPayload)
+                });
+
+                if (!geminiResponse.ok) {
+                    const errorText = await geminiResponse.text();
+                    throw new Error(`이미지 분석 API 요청 실패: ${geminiResponse.status} ${geminiResponse.statusText} - ${errorText}`);
+                }
+
+                const geminiResult = await geminiResponse.json();
+                let imageDescription = "";
+                if (geminiResult.candidates && geminiResult.candidates.length > 0 && geminiResult.candidates[0].content && geminiResult.candidates[0].content.parts && geminiResult.candidates[0].content.parts.length > 0) {
+                    imageDescription = geminiResult.candidates[0].content.parts[0].text;
+                } else {
+                    throw new Error('이미지 분석 결과가 없습니다.');
+                }
+
+                // Step 2: 지브리 스타일 이미지 생성 (Imagen 모델 사용)
+                // "younger"라는 키워드를 추가하여 더 젊은 모습으로 변환하도록 프롬프트 수정
+                const ghibliPrompt = `A Studio Ghibli animated style illustration of a younger version of: ${imageDescription}. Focus on soft, warm colors, detailed natural elements, and a dreamy, whimsical atmosphere. The person should retain their recognizable features but be rendered in an anime style, with simplified yet expressive lines, and a gentle, serene expression. The background should be reimagined as a lush, fantastical Ghibli-esque landscape, possibly with rolling hills, vibrant trees, and a clear, bright sky, all rendered with the characteristic hand-drawn feel.`;
+
+                const imagenPayload = {
+                    instances: { prompt: ghibliPrompt },
+                    parameters: { "sampleCount": 1 }
+                };
+                const imagenApiKey = ""; // Canvas 환경에서 자동으로 제공
+                const imagenApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${imagenApiKey}`;
+
+                const imagenResponse = await fetch(imagenApiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(imagenPayload)
+                });
+
+                if (!imagenResponse.ok) {
+                    const errorText = await imagenResponse.text();
+                    throw new Error(`지브리 이미지 생성 API 요청 실패: ${imagenResponse.status} ${imagenResponse.statusText} - ${errorText}`);
+                }
+
+                const imagenResult = await imagenResponse.json();
+
+                if (imagenResult.predictions && imagenResult.predictions.length > 0 && imagenResult.predictions[0].bytesBase64Encoded) {
+                    const imageUrl = `data:image/png;base64,${imagenResult.predictions[0].bytesBase64Encoded}`;
+                    generatedImage.src = imageUrl;
+                    resultContainer.classList.remove('hidden');
+                } else {
+                    showError('지브리 이미지 생성에 실패했습니다. API 응답 구조가 예상과 다릅니다.');
+                    console.error('API 응답 오류:', imagenResult);
+                }
+            } catch (error) {
+                showError('이미지 변환 중 오류가 발생했습니다: ' + error.message);
+                console.error('이미지 변환 오류:', error);
+            } finally {
+                loadingIndicator.classList.add('hidden');
+                convertButton.disabled = false;
+            }
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
